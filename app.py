@@ -1375,7 +1375,8 @@ def admin_reports_view():
     )
     
     if selected_result_idx is not None:
-        result_id = res_df.loc[selected_result_idx, "id"]
+        # Cast to int to prevent psycopg2 numpy.int64 adaptation errors
+        result_id = int(res_df.loc[selected_result_idx, "id"])
         result_details = db.get_result_by_id(result_id)
         responses = db.get_result_responses(result_id)
         
