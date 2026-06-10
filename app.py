@@ -1381,23 +1381,25 @@ def admin_reports_view():
         
         col_m1, col_m2 = st.columns(2)
         with col_m1:
+            student_info = result_details.get("students") or {}
             st.markdown(f"""
             <div class='premium-card'>
                 <h4 style='margin-top:0; color:#1E3A8A;'>Candidate Details</h4>
-                <b>Name:</b> {result_details['students']['name']}<br/>
-                <b>Roll Number:</b> {result_details['students']['roll_number']}<br/>
-                <b>Email:</b> {result_details['students']['email']}<br/>
-                <b>Phone:</b> {result_details['students']['phone'] or 'N/A'}<br/>
+                <b>Name:</b> {student_info.get('name', 'Unknown')}<br/>
+                <b>Roll Number:</b> {student_info.get('roll_number', 'Unknown')}<br/>
+                <b>Email:</b> {student_info.get('email', 'Unknown')}<br/>
+                <b>Phone:</b> {student_info.get('phone') or 'N/A'}<br/>
             </div>
             """, unsafe_allow_html=True)
         with col_m2:
+            exam_info = result_details.get("exams") or {}
             st.markdown(f"""
             <div class='premium-card'>
                 <h4 style='margin-top:0; color:#1E3A8A;'>Performance Summary</h4>
-                <b>Exam Taken:</b> {result_details['exams']['title']}<br/>
-                <b>Grade Awarded:</b> {result_details['grade']}<br/>
-                <b>Correct Ratio:</b> {result_details['score']} / {result_details['total_questions']}<br/>
-                <b>Percentage Score:</b> {result_details['percentage']:.2f}%<br/>
+                <b>Exam Taken:</b> {exam_info.get('title', 'Unknown')}<br/>
+                <b>Grade Awarded:</b> {result_details.get('grade', 'N/A')}<br/>
+                <b>Correct Ratio:</b> {result_details.get('score', 0)} / {result_details.get('total_questions', 0)}<br/>
+                <b>Percentage Score:</b> {result_details.get('percentage', 0):.2f}%<br/>
             </div>
             """, unsafe_allow_html=True)
             
