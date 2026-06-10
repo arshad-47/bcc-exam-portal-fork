@@ -1,11 +1,12 @@
 import io
+import os
 import qrcode
 from datetime import datetime
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from src.config import Config
 
 class CertificateGenerator:
@@ -32,142 +33,128 @@ class CertificateGenerator:
         """
         # Set page dimension to Landscape A4
         page_width, page_height = landscape(A4)
-        
         pdf_buffer = io.BytesIO()
-        
-        # Build document with tight margins (50 points / ~0.7 inch)
-        doc = SimpleDocTemplate(
-            pdf_buffer,
-            pagesize=landscape(A4),
-            leftMargin=40,
-            rightMargin=40,
-            topMargin=40,
-            bottomMargin=40
-        )
-        
-        # Color Palette - Premium Navy & Gold theme
-        navy_color = colors.HexColor("#1E3A8A")  # Deep blue
-        gold_color = colors.HexColor("#B45309")  # Amber/gold
-        charcoal = colors.HexColor("#1F2937")    # Dark charcoal for text
-        slate_gray = colors.HexColor("#64748B")  # Muted grey
-        
-        # Styles
-        styles = getSampleStyleSheet()
-        
-        title_style = ParagraphStyle(
-            'CertTitle',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=34,
-            leading=42,
-            textColor=navy_color,
-            alignment=TA_CENTER
-        )
-        
-        subtitle_style = ParagraphStyle(
-            'CertSubtitle',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=16,
-            leading=20,
-            textColor=gold_color,
-            alignment=TA_CENTER,
-            spaceAfter=15
-        )
-        
-        desc_style = ParagraphStyle(
-            'CertDesc',
-            parent=styles['Normal'],
-            fontName='Helvetica',
-            fontSize=14,
-            leading=20,
-            textColor=charcoal,
-            alignment=TA_CENTER
-        )
-        
-        student_style = ParagraphStyle(
-            'CertStudent',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=26,
-            leading=32,
-            textColor=navy_color,
-            alignment=TA_CENTER,
-            spaceBefore=10,
-            spaceAfter=10
-        )
-        
-        details_style = ParagraphStyle(
-            'CertDetails',
-            parent=styles['Normal'],
-            fontName='Helvetica',
-            fontSize=11,
-            leading=15,
-            textColor=slate_gray,
-            alignment=TA_CENTER
-        )
-        
-        meta_label_style = ParagraphStyle(
-            'MetaLabel',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=10,
-            leading=12,
-            textColor=navy_color,
-            alignment=TA_LEFT
-        )
-        
-        meta_value_style = ParagraphStyle(
-            'MetaValue',
-            parent=styles['Normal'],
-            fontName='Helvetica',
-            fontSize=10,
-            leading=12,
-            textColor=charcoal,
-            alignment=TA_LEFT
-        )
 
-        elements = []
-        
-        # --- Spacer to center the content ---
-        elements.append(Spacer(1, 10))
-        
-        # --- HEADER / INSTITUTE NAME ---
-        elements.append(Paragraph(Config.INSTITUTE_NAME.upper(), title_style))
-        elements.append(Spacer(1, 8))
-        elements.append(Paragraph("CERTIFICATE OF ACHIEVEMENT", subtitle_style))
-        
-        # --- DECORATIVE LINE ---
-        line_data = [[""]]
-        line_table = Table(line_data, colWidths=[page_width - 120], rowHeights=[2])
-        line_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), gold_color),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-            ('TOPPADDING', (0,0), (-1,-1), 0),
-        ]))
-        elements.append(line_table)
-        elements.append(Spacer(1, 20))
-        
-        # --- CERTIFICATE CONTENT DESCRIPTION ---
-        elements.append(Paragraph("This is proudly presented to", desc_style))
-        elements.append(Paragraph(cert_data['student_name'].upper(), student_style))
-        
+        def resolve_path(path_value):
+            if not path_value:
+                return None
+            path_value = os.path.expanduser(path_value)
+            if os.path.isabs(path_value):
+                return path_value
+            return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", path_value))
+
+        template_path = resolve_path(Config.CERTIFICATE_TEMPLATE_PATH)
+        signature_path = resolve_path(Config.PROGRAM_DIRECTOR_SIGNATURE_PATH)
+
+        c = canvas.Canvas(pdf_buffer, pagesize=landscape(A4))
+
+        if template_path and os.path.exists(template_path):
+            c.drawImage(template_path, 0, 0, width=page_width, height=page_height, mask='auto')
+        else:
+            c.setFillColor(colors.whitesmoke)
+            c.rect(0, 0, page_width, page_height, fill=1, stroke=0)
+
+        navy_color = colors.HexColor("#1E3A8A")
+        charcoal = colors.HexColor("#1F2937")
+        gold_color = colors.HexColor("#B45309")
+        gray_color = colors.HexColor("#6B7280")
+
+        def wrapped_centered_text(text, x_center, y_start, max_width, font_name, font_size, leading):
+            words = text.split()
+            current_line = ""
+            y = y_start
+            for word in words:
+                test_line = f"{current_line} {word}".strip()
+                if stringWidth(test_line, font_name, font_size) <= max_width:
+                    current_line = test_line
+                else:
+                    c.drawCentredString(x_center, y, current_line)
+                    y -= leading
+                    current_line = word
+            if current_line:
+                c.drawCentredString(x_center, y, current_line)
+                y -= leading
+            return y
+
+        c.setFillColor(navy_color)
+        c.setFont("Times-Italic", 28)
+        c.drawCentredString(page_width / 2, page_height - 305, cert_data['student_name'].upper())
+
+        exam = cert_data.get('exam_title', 'Examination')
         percentage = cert_data.get('percentage', 0.0)
         grade = cert_data.get('grade', 'F')
         roll = cert_data.get('roll_number', 'N/A')
-        exam = cert_data.get('exam_title', 'Examination')
-        
+        issue_date = cert_data.get('issue_date')
+        if isinstance(issue_date, datetime):
+            issue_date_str = issue_date.strftime("%B %d, %Y")
+        else:
+            issue_date_str = str(issue_date or datetime.now().strftime("%B %d, %Y"))
+
+        c.setFont("Helvetica-Oblique", 14)
+        c.setFillColor(charcoal)
+        y = page_height - 340
         desc_text = (
-            f"for successfully completing the <b>{Config.COURSE_NAME}</b> assessment "
-            f"titled <b>\"{exam}\"</b>.<br/>"
-            f"The candidate secured an overall score of <b>{percentage:.2f}%</b> and is awarded <b>Grade '{grade}'</b>."
+            f"for successfully completing the {Config.COURSE_NAME} assessment titled \"{exam}\"."
         )
-        elements.append(Paragraph(desc_text, desc_style))
-        elements.append(Spacer(1, 25))
-        
-        # --- FOOTER BLOCK: QR, Signatures, Details ---
-        
-        # Generate QR code
+        y = wrapped_centered_text(
+            desc_text,
+            page_width / 2,
+            y,
+            page_width * 0.7,
+            "Helvetica",
+            14,
+            18
+        )
+
+        score_text = (
+            f"The candidate secured an overall score of {percentage:.2f}% and is awarded Grade \"{grade}\"."
+        )
+        y = wrapped_centered_text(
+            score_text,
+            page_width / 2,
+            y - 6,
+            page_width * 0.7,
+            "Helvetica",
+            14,
+            18
+        )
+
+        # Typing test line (if available)
+        typing_wpm = cert_data.get("typing_wpm")
+        typing_accuracy = cert_data.get("typing_accuracy")
+        if typing_wpm is not None:
+            typing_text = f"Typing Proficiency: {typing_wpm} WPM | Accuracy: {typing_accuracy:.1f}%"
+            c.setFont("Helvetica-Oblique", 11)
+            c.setFillColor(gold_color)
+            c.drawCentredString(page_width / 2, y - 6, typing_text)
+            y -= 14
+
+        # Module grades (if available)
+        bcc_grade = cert_data.get("bcc_grade")
+        msoffice_grade = cert_data.get("msoffice_grade")
+        if bcc_grade and bcc_grade != "N/A" and msoffice_grade and msoffice_grade != "N/A":
+            module_text = f"BCC Module: Grade {bcc_grade} | MS Office Module: Grade {msoffice_grade}"
+            c.setFont("Helvetica", 10)
+            c.setFillColor(navy_color)
+            c.drawCentredString(page_width / 2, y - 6, module_text)
+
+        meta_x = 90
+        meta_y = 165
+        c.setFont("Helvetica-Bold", 10)
+        c.setFillColor(navy_color)
+        c.drawString(meta_x, meta_y, "Certificate ID:")
+        c.drawString(meta_x, meta_y - 18, "Roll Number:")
+        c.drawString(meta_x, meta_y - 36, "Issue Date:")
+        c.drawString(meta_x, meta_y - 54, "Status:")
+
+        c.setFont("Helvetica", 10)
+        c.setFillColor(charcoal)
+        c.drawString(meta_x + 110, meta_y, cert_data['certificate_id'])
+        c.drawString(meta_x + 110, meta_y - 18, roll)
+        c.drawString(meta_x + 110, meta_y - 36, issue_date_str)
+        c.setFillColor(colors.green)
+        c.drawString(meta_x + 110, meta_y - 54, "VERIFIED")
+
         qr_buf = io.BytesIO()
         qr = qrcode.QRCode(version=1, box_size=8, border=1)
         qr.add_data(cert_data.get('verification_url', ''))
@@ -175,112 +162,37 @@ class CertificateGenerator:
         qr_img = qr.make_image(fill_color="#1E3A8A", back_color="white")
         qr_img.save(qr_buf, format="PNG")
         qr_buf.seek(0)
+        qr_reader = ImageReader(qr_buf)
+
+        qr_size = 70
+        qr_x = 90
+        qr_y = 40
+        c.drawImage(qr_reader, qr_x, qr_y, qr_size, qr_size, mask='auto')
+        c.setFont("Helvetica", 8)
+        c.setFillColor(gray_color)
+        c.drawCentredString(qr_x + qr_size / 2, qr_y - 12, "Scan to verify")
+
+        sig_x = page_width - 290
+        sig_y = 90
         
-        # ReportLab Image for QR Code (80x80 points)
-        rl_qr = RLImage(qr_buf, width=80, height=80)
+        if signature_path and os.path.exists(signature_path):
+            try:
+                c.drawImage(signature_path, sig_x + 30, sig_y + 18, width=120, height=45, mask='auto')
+            except Exception:
+                pass
         
-        # Prepare Certificate metadata block (Cert ID, Roll, Date)
-        issue_date = cert_data.get('issue_date')
-        if isinstance(issue_date, datetime):
-            issue_date_str = issue_date.strftime("%B %d, %Y")
-        else:
-            issue_date_str = str(issue_date)
-            
-        metadata_content = [
-            [Paragraph("Certificate ID:", meta_label_style), Paragraph(cert_data['certificate_id'], meta_value_style)],
-            [Paragraph("Roll Number:", meta_label_style), Paragraph(roll, meta_value_style)],
-            [Paragraph("Issue Date:", meta_label_style), Paragraph(issue_date_str, meta_value_style)],
-            [Paragraph("Status:", meta_label_style), Paragraph("<font color='green'><b>VERIFIED</b></font>", meta_value_style)]
-        ]
-        metadata_table = Table(metadata_content, colWidths=[90, 150])
-        metadata_table.setStyle(TableStyle([
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-            ('TOPPADDING', (0,0), (-1,-1), 4),
-            ('LEFTPADDING', (0,0), (-1,-1), 0),
-        ]))
-        
-        # Signatures
-        sig_label_style = ParagraphStyle(
-            'SigLabel',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=11,
-            leading=13,
-            textColor=navy_color,
-            alignment=TA_CENTER
-        )
-        sig_title_style = ParagraphStyle(
-            'SigTitle',
-            parent=styles['Normal'],
-            fontName='Helvetica',
-            fontSize=9,
-            leading=11,
-            textColor=slate_gray,
-            alignment=TA_CENTER
-        )
-        
-        sig_block = [
-            [Paragraph("____________________________", sig_label_style)],
-            [Spacer(1, 5)],
-            [Paragraph("Program Director", sig_label_style)],
-            [Paragraph(Config.INSTITUTE_NAME, sig_title_style)]
-        ]
-        sig_table = Table(sig_block, colWidths=[200])
-        sig_table.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-            ('TOPPADDING', (0,0), (-1,-1), 0),
-        ]))
-        
-        # Assemble bottom row of certificate: Metadata, QR Code, Signature
-        bottom_table_data = [
-            [metadata_table, rl_qr, sig_table]
-        ]
-        
-        bottom_table = Table(bottom_table_data, colWidths=[260, 120, 240])
-        bottom_table.setStyle(TableStyle([
-            ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
-            ('ALIGN', (1,0), (1,0), 'CENTER'), # Center the QR code
-            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-            ('TOPPADDING', (0,0), (-1,-1), 0),
-        ]))
-        
-        elements.append(bottom_table)
-        
-        # Draw elegant borders on the canvas
-        def draw_borders(canvas, document):
-            canvas.saveState()
-            
-            # Margins & dimensions
-            w, h = landscape(A4)
-            
-            # Primary outer border (thick navy blue)
-            canvas.setStrokeColor(navy_color)
-            canvas.setLineWidth(5)
-            canvas.rect(20, 20, w - 40, h - 40)
-            
-            # Secondary inner border (thin gold)
-            canvas.setStrokeColor(gold_color)
-            canvas.setLineWidth(1.5)
-            canvas.rect(26, 26, w - 52, h - 52)
-            
-            # Corner accents (flourish graphics)
-            canvas.setFillColor(navy_color)
-            
-            # Top-left corner design
-            canvas.rect(26, h-40, 14, 14, fill=1, stroke=0)
-            # Top-right
-            canvas.rect(w-40, h-40, 14, 14, fill=1, stroke=0)
-            # Bottom-left
-            canvas.rect(26, 26, 14, 14, fill=1, stroke=0)
-            # Bottom-right
-            canvas.rect(w-40, 26, 14, 14, fill=1, stroke=0)
-            
-            canvas.restoreState()
-            
-        # Build the PDF using document template and the custom background function
-        doc.build(elements, onFirstPage=draw_borders)
-        
+        c.setStrokeColor(charcoal)
+        c.setLineWidth(1.2)
+        c.line(sig_x, sig_y + 20, sig_x + 180, sig_y + 20)
+
+        c.setFont("Helvetica-Bold", 10)
+        c.setFillColor(navy_color)
+        c.drawCentredString(sig_x + 90, sig_y, Config.PROGRAM_DIRECTOR_NAME)
+        c.setFont("Helvetica", 9)
+        c.setFillColor(gray_color)
+        c.drawCentredString(sig_x + 90, sig_y - 15, Config.PROGRAM_DIRECTOR_TITLE)
+
+        c.showPage()
+        c.save()
         pdf_buffer.seek(0)
         return pdf_buffer

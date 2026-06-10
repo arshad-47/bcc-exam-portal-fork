@@ -1,4 +1,11 @@
 import streamlit as st
+st.set_page_config(
+    page_title="Basic Computer Course Exam Portal",
+    page_icon="🎓",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 import pandas as pd
 import plotly.express as px
 import random
@@ -12,19 +19,11 @@ from src.evaluation import EvaluationEngine
 from src.utils import UIHelper
 
 def main():
-    st.set_page_config(
-        page_title="Basic Computer Course Exam Portal",
-        page_icon="🎓",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-    
     # Inject Custom CSS styles
     UIHelper.inject_custom_css()
     
     # Initialize Database Connection
     db = Database.get_client()
-    db.init_db()
     
     # Session Timeout Check (Logs out if inactive)
     if Auth.is_authenticated():
@@ -36,6 +35,8 @@ def main():
         st.session_state.current_view = "Dashboard"
     if "exam_started" not in st.session_state:
         st.session_state.exam_started = False
+    if "typing_phase" not in st.session_state:
+        st.session_state.typing_phase = False
         
     # Route Page
     if not Auth.is_authenticated():
@@ -47,6 +48,8 @@ def main():
         elif role == "student":
             if st.session_state.exam_started:
                 render_exam_interface()
+            elif st.session_state.get("typing_phase"):
+                render_typing_test()
             else:
                 render_student_portal()
 
@@ -84,7 +87,7 @@ def render_login_screen():
             login_email = st.text_input("Registered Email Address", key="login_email")
             login_password = st.text_input("Password", type="password", key="login_password")
             
-            if st.button("Log In", type="primary", width="stretch"):
+            if st.button("Log In", type="primary", use_container_width=True):
                 if login_email and login_password:
                     success, response = Auth.login(login_email, login_password)
                     if success:
@@ -109,7 +112,7 @@ def render_login_screen():
             reg_password = st.text_input("Choose Password", type="password", help="Minimum 6 characters")
             reg_confirm = st.text_input("Confirm Password", type="password")
             
-            if st.button("Register Student", type="primary", width="stretch"):
+            if st.button("Register Student", type="primary", use_container_width=True):
                 if reg_password != reg_confirm:
                     st.error("Passwords do not match.")
                 elif len(reg_password) < 6:
@@ -130,7 +133,7 @@ def render_login_screen():
         with tab_forgot:
             st.markdown("### Reset Password")
             forgot_email = st.text_input("Enter your registered email address")
-            if st.button("Send Reset Link", type="primary", width="stretch"):
+            if st.button("Send Reset Link", type="primary", use_container_width=True):
                 if forgot_email:
                     success, msg = Auth.reset_password(forgot_email)
                     if success:
@@ -163,7 +166,7 @@ def render_student_portal():
     st.session_state.current_view = selected_option
     
     st.sidebar.markdown("---")
-    if st.sidebar.button("🚪 Log Out", width="stretch"):
+    if st.sidebar.button("🚪 Log Out", use_container_width=True):
         Auth.logout()
         st.rerun()
         
@@ -217,10 +220,10 @@ def student_dashboard_view():
                 "Percentage": f"{r['percentage']:.2f}%",
                 "Grade": r["grade"],
                 "Status": "Passed" if r["passed"] else "Failed",
-                "Date": r["submitted_at"][:16]
+                "Date": str(r["submitted_at"])[:16]
             } for r in results[:3]
         ])
-        st.dataframe(recent_df, width="stretch", hide_index=True)
+        st.dataframe(recent_df, hide_index=True)
     else:
         st.info("No exam history found. Navigate to 'Available Exams' to take your first test!")
 
@@ -273,7 +276,7 @@ def student_exams_view():
         col_left, col_btn = st.columns([5, 1])
         with col_btn:
             btn_label = "Retake Exam" if attempted else "Start Exam"
-            if st.button(btn_label, key=f"start_exam_{exam['id']}", type="primary", width="stretch"):
+            if st.button(btn_label, key=f"start_exam_{exam['id']}", type="primary", use_container_width=True):
                 # Retrieve questions
                 questions = db.get_exam_questions(exam["id"])
                 
@@ -312,17 +315,26 @@ def student_results_view():
         
         col1, col2 = st.columns([4, 1])
         with col1:
+            # Fetch typing test result for this attempt
+            typing_result = db.get_typing_result_by_result_id(r["id"])
+            typing_badge = ""
+            if typing_result:
+                t_wpm = typing_result.get("wpm", 0)
+                t_acc = typing_result.get("accuracy", 0)
+                typing_badge = f"<span>⌨️ <b>Typing:</b> {t_wpm} WPM ({t_acc:.0f}% acc)</span>"
+
             st.markdown(f"""
             <div class='premium-card' style='margin-bottom:0px;'>
                 <div style='display:flex; justify-content:space-between;'>
                     <span style='font-size:1.15rem; font-weight:bold; color:#1E3A8A;'>{r['exams']['title']}</span>
                     <span class='badge {badge_class}'>{status_text}</span>
                 </div>
-                <div style='margin-top:0.5rem; display:flex; gap:2rem; font-size:0.95rem; color:#475569;'>
-                    <span>📅 <b>Submitted on:</b> {r['submitted_at'][:16]}</span>
+                <div style='margin-top:0.5rem; display:flex; gap:2rem; font-size:0.95rem; color:#475569; flex-wrap:wrap;'>
+                    <span>📅 <b>Submitted on:</b> {str(r['submitted_at'])[:16]}</span>
                     <span>📈 <b>Percentage:</b> {r['percentage']:.2f}%</span>
                     <span>🏅 <b>Grade:</b> {r['grade']}</span>
                     <span>🎯 <b>Score:</b> {r['score']}/{r['total_questions']}</span>
+                    {typing_badge}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -340,10 +352,10 @@ def student_results_view():
                     cert = {"certificate_id": cert_id}
                     
                 # Setup verification link
-                # Real deployment domain or local fallback
                 base_url = "http://localhost:8501" # Default local port
                 verification_url = f"{base_url}/?verify={cert['certificate_id']}"
-                
+
+                typing_result = typing_result or {}
                 cert_data = {
                     "certificate_id": cert["certificate_id"],
                     "student_name": st.session_state.user_data["name"],
@@ -351,8 +363,10 @@ def student_results_view():
                     "exam_title": r["exams"]["title"],
                     "percentage": r["percentage"],
                     "grade": r["grade"],
-                    "issue_date": r["submitted_at"][:10],
-                    "verification_url": verification_url
+                    "issue_date": str(r["submitted_at"])[:10],
+                    "verification_url": verification_url,
+                    "typing_wpm": typing_result.get("wpm"),
+                    "typing_accuracy": typing_result.get("accuracy")
                 }
                 
                 try:
@@ -363,13 +377,12 @@ def student_results_view():
                         file_name=f"BCC_Certificate_{cert['certificate_id']}.pdf",
                         mime="application/pdf",
                         key=f"dl_btn_{r['id']}",
-                        width="stretch"
+                        use_container_width=True
                     )
                 except Exception as e:
                     st.error(f"Error generating PDF: {e}")
             else:
-                st.button("❌ Certificate", disabled=True, key=f"dl_dis_{r['id']}", width="stretch")
-                
+                    st.button("❌ Certificate", disabled=True, key=f"dl_dis_{r['id']}", use_container_width=True)
         st.markdown("<div style='margin-bottom:1.5rem;'></div>", unsafe_allow_html=True)
 
 # ====================================================================
@@ -442,7 +455,7 @@ def render_exam_interface():
             btn_style = "background-color: #F8FAFC; color: #94A3B8; border: 1px solid #E2E8F0;"
             
         with col_item:
-            if st.button(f"{idx+1}", key=f"nav_grid_{idx}", width="stretch"):
+            if st.button(f"{idx+1}", key=f"nav_grid_{idx}", use_container_width=True):
                 st.session_state.current_question_index = idx
                 st.session_state.exam_visited_questions.add(questions[idx]["id"])
                 st.rerun()
@@ -477,18 +490,23 @@ def render_exam_interface():
     
     if q_curr["question_type"] == "MCQ":
         opts = {
-            "A": f"A) {q_curr['option_a']}",
-            "B": f"B) {q_curr['option_b']}",
-            "C": f"C) {q_curr['option_c']}",
-            "D": f"D) {q_curr['option_d']}"
+            "A": q_curr['option_a'],
+            "B": q_curr['option_b'],
+            "C": q_curr['option_c'],
+            "D": q_curr['option_d']
         }
         
+        import random
+        keys = list(opts.keys())
+        rng = random.Random(q_curr['id'] + int(st.session_state.exam_start_time.timestamp()))
+        rng.shuffle(keys)
+        
         # We find index of current selection for radio
-        radio_idx = list(opts.keys()).index(current_selected) if current_selected in opts else None
+        radio_idx = keys.index(current_selected) if current_selected in keys else None
         
         selected_key = st.radio(
             "Select the correct answer:",
-            options=list(opts.keys()),
+            options=keys,
             format_func=lambda x: opts[x],
             index=radio_idx,
             key=f"q_opt_select_{q_id_curr}"
@@ -520,20 +538,20 @@ def render_exam_interface():
     col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([1, 1, 1, 1])
     
     with col_nav1:
-        if st.button("⬅️ Previous Question", disabled=(current_idx == 0), width="stretch"):
+        if st.button("⬅️ Previous Question", disabled=(current_idx == 0), use_container_width=True):
             st.session_state.current_question_index -= 1
             st.session_state.exam_visited_questions.add(questions[st.session_state.current_question_index]["id"])
             st.rerun()
             
     with col_nav2:
-        if st.button("Next Question ➡️", disabled=(current_idx == len(questions) - 1), width="stretch"):
+        if st.button("Next Question ➡️", disabled=(current_idx == len(questions) - 1), use_container_width=True):
             st.session_state.current_question_index += 1
             st.session_state.exam_visited_questions.add(questions[st.session_state.current_question_index]["id"])
             st.rerun()
             
     with col_nav3:
         flag_btn_label = "Unflag Question 🏳️" if q_id_curr in flagged else "Flag for Review 🏴"
-        if st.button(flag_btn_label, width="stretch"):
+        if st.button(flag_btn_label, use_container_width=True):
             if q_id_curr in flagged:
                 st.session_state.exam_flagged_questions.remove(q_id_curr)
             else:
@@ -541,7 +559,7 @@ def render_exam_interface():
             st.rerun()
             
     with col_nav4:
-        if st.button("🧹 Clear Selection", width="stretch"):
+        if st.button("🧹 Clear Selection", use_container_width=True):
             if q_id_curr in st.session_state.exam_responses:
                 del st.session_state.exam_responses[q_id_curr]
             st.rerun()
@@ -550,7 +568,7 @@ def render_exam_interface():
     st.markdown("<hr style='margin: 2rem 0;'/>", unsafe_allow_html=True)
     col_sub_left, col_sub_btn = st.columns([4, 1])
     with col_sub_btn:
-        if st.button("🚨 Submit Exam", type="primary", width="stretch"):
+        if st.button("🚨 Submit Exam", type="primary", use_container_width=True):
             submit_student_exam(db, exam, questions, responses)
             st.rerun()
 
@@ -575,14 +593,15 @@ def submit_student_exam(db, exam, questions, responses):
     if result:
         db.save_responses(result["id"], eval_results["response_details"])
         
-        # If passed, register certificate
+        # If passed, register certificate (will be updated with typing data later)
         if eval_results["passed"]:
             cert_id = CertificateGenerator.generate_cert_id(result["id"])
             db.create_certificate(cert_id, st.session_state.user_id, result["id"])
             
-    # Save results in session temporarily to show the result screen
+    # Store MCQ results in session and transition to Typing Test phase
     st.session_state.exam_started = False
-    st.session_state.last_exam_results = {
+    st.session_state.typing_phase = True
+    st.session_state.mcq_results = {
         "title": exam["title"],
         "score": eval_results["score"],
         "total_questions": eval_results["total_questions"],
@@ -590,11 +609,148 @@ def submit_student_exam(db, exam, questions, responses):
         "grade": eval_results["grade"],
         "passed": eval_results["passed"],
         "topic_analysis": eval_results["topic_analysis"],
+        "bcc_grade": eval_results.get("bcc_grade", "N/A"),
+        "msoffice_grade": eval_results.get("msoffice_grade", "N/A"),
         "result_id": result["id"] if result else None
+    }
+    st.session_state.typing_start_time = datetime.now()
+
+
+
+# Typing Test passage
+TYPING_PASSAGE = (
+    "A computer is an electronic device that processes data according to a set of instructions "
+    "called a program. Computers are used in many fields such as science, education, business, "
+    "and communication. The basic components of a computer include the central processing unit, "
+    "memory, storage devices, and input and output peripherals. Operating systems manage hardware "
+    "and software resources and provide common services for computer programs. The internet has "
+    "transformed the way people communicate, access information, and conduct business worldwide."
+)
+TYPING_DURATION_MINUTES = 1.0
+
+def render_typing_test():
+    db = Database.get_client()
+    mcq = st.session_state.get("mcq_results", {})
+
+    # Calculate time remaining for the typing test
+    elapsed = datetime.now() - st.session_state.get("typing_start_time", datetime.now())
+    total_seconds = int(TYPING_DURATION_MINUTES * 60)
+    remaining_seconds = max(0, total_seconds - int(elapsed.total_seconds()))
+    mins, secs = divmod(remaining_seconds, 60)
+    timer_color = "red" if mins < 1 else "#1E3A8A"
+
+    # Sidebar info
+    st.sidebar.markdown("### ⌨️ TYPING TEST")
+    st.sidebar.markdown(f"**MCQ Phase:** ✅ Completed")
+    st.sidebar.markdown(f"**MCQ Grade:** `{mcq.get('grade', 'N/A')}` ({mcq.get('percentage', 0):.2f}%)")
+    
+    # We use a streamlit component for a live ticking timer without refreshing the page
+    import streamlit.components.v1 as components
+    timer_html = f"""
+        <div style="background-color:#F8FAFC; border:2px solid {timer_color}; border-radius:10px; padding:12px; text-align:center; font-family: sans-serif;">
+            <span id="timer" style="font-size:1.8rem; font-weight:700; color:{timer_color};">⏱️ {mins:02d}:{secs:02d}</span>
+        </div>
+        <script>
+            var timeLeft = {remaining_seconds};
+            var timerEl = document.getElementById("timer");
+            var interval = setInterval(function() {{
+                timeLeft--;
+                if(timeLeft <= 0) {{
+                    clearInterval(interval);
+                    timerEl.innerHTML = "⏱️ 00:00";
+                }} else {{
+                    var m = Math.floor(timeLeft / 60);
+                    var s = timeLeft % 60;
+                    timerEl.innerHTML = "⏱️ " + (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+                }}
+            }}, 1000);
+        </script>
+    """
+    with st.sidebar:
+        components.html(timer_html, height=80)
+        
+    st.sidebar.markdown("---")
+    st.sidebar.info("Type the passage exactly as shown. Accuracy and speed both count!")
+
+    # Auto-submit when time is up
+    if remaining_seconds <= 0:
+        typed = st.session_state.get("typing_input_text", "")
+        actual_elapsed = min(elapsed.total_seconds() / 60.0, TYPING_DURATION_MINUTES)
+        _submit_typing_test(db, mcq, TYPING_PASSAGE, typed, actual_elapsed)
+        st.rerun()
+        return
+
+    st.markdown("## ⌨️ Typing Test — Phase 2")
+    st.markdown("""
+    <div style='background-color:#EFF6FF; border-left:4px solid #3B82F6; padding:12px 16px; border-radius:6px; margin-bottom:1rem;'>
+        <b>Instructions:</b> Type the passage below in the text box exactly as shown. 
+        Your speed (WPM) and accuracy will be measured. Minimum required: <b>20 WPM</b> with <b>95% accuracy</b>.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Passage display
+    st.markdown(f"""
+    <div style='background-color:#F1F5F9; border:1px solid #CBD5E1; border-radius:8px; padding:20px; 
+                font-family:Georgia, serif; font-size:1.05rem; line-height:1.8; color:#1E293B; margin-bottom:1.5rem;'>
+        {TYPING_PASSAGE}
+    </div>
+    """, unsafe_allow_html=True)
+
+    typed_text = st.text_area(
+        "Start typing here:",
+        key="typing_input_text",
+        height=180,
+        placeholder="Begin typing the passage above...",
+        help="Type exactly as shown. Spelling and punctuation matter."
+    )
+
+    st.markdown("<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
+
+    col_skip, col_submit = st.columns([3, 1])
+    with col_skip:
+        if st.button("⏭️ Skip Typing Test (Score 0 WPM)", use_container_width=True):
+            _submit_typing_test(db, mcq, TYPING_PASSAGE, "", TYPING_DURATION_MINUTES)
+            st.rerun()
+    with col_submit:
+        if st.button("✅ Submit Typing Test", type="primary", use_container_width=True):
+            actual_elapsed_min = min(elapsed.total_seconds() / 60.0, TYPING_DURATION_MINUTES)
+            _submit_typing_test(db, mcq, TYPING_PASSAGE, typed_text or "", actual_elapsed_min)
+            st.rerun()
+
+def _submit_typing_test(db, mcq_results, passage, typed_text, duration_minutes):
+    """Evaluate typing test, persist result, then set up final results screen."""
+    typing_eval = EvaluationEngine.evaluate_typing_test(passage, typed_text, duration_minutes)
+    wpm = typing_eval["wpm"]
+    accuracy = typing_eval["accuracy"]
+    # Pass criteria: ≥20 WPM and ≥95% accuracy
+    typing_passed = wpm >= 20 and accuracy >= 95.0
+
+    result_id = mcq_results.get("result_id")
+    if result_id:
+        try:
+            db.create_typing_result(
+                result_id=result_id,
+                wpm=wpm,
+                accuracy=accuracy,
+                passage_text=passage,
+                typed_text=typed_text,
+                passed=typing_passed
+            )
+        except Exception as e:
+            pass  # Non-critical; results screen still shows
+
+    # Transition to final results screen
+    st.session_state.typing_phase = False
+    st.session_state.last_exam_results = {
+        **mcq_results,
+        "typing_wpm": wpm,
+        "typing_accuracy": accuracy,
+        "typing_passed": typing_passed
     }
     st.session_state.current_view = "ExamResultScreen"
 
 # Post Exam evaluation results display
+
 def show_exam_results_screen():
     st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
     res = st.session_state.get("last_exam_results")
@@ -660,16 +816,37 @@ def show_exam_results_screen():
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)'
             )
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig)
         else:
             st.info("No topic-wise details available.")
             
     with col_r:
         st.markdown("### Performance Metrics")
         
-        # Render custom metrics
+        # Render MCQ metrics
         UIHelper.render_metric("Final Score", f"{res['score']} / {res['total_questions']}", "🎯")
         UIHelper.render_metric("Score Percentage", f"{res['percentage']:.2f}%", "📊")
+        
+        # Render Module metrics
+        if res.get("bcc_grade") and res.get("bcc_grade") != "N/A":
+            st.markdown("---")
+            st.markdown("#### 📚 Module Performance")
+            UIHelper.render_metric("BCC Module Grade", res.get("bcc_grade", "N/A"), "🖥️")
+            UIHelper.render_metric("MS Office Module Grade", res.get("msoffice_grade", "N/A"), "📄")
+
+        # Render Typing Test metrics
+        typing_wpm = res.get("typing_wpm")
+        typing_accuracy = res.get("typing_accuracy")
+        typing_passed_flag = res.get("typing_passed", False)
+        if typing_wpm is not None:
+            st.markdown("---")
+            st.markdown("#### ⌨️ Typing Test Results")
+            UIHelper.render_metric("Typing Speed", f"{typing_wpm} WPM", "⌨️")
+            UIHelper.render_metric("Typing Accuracy", f"{typing_accuracy:.1f}%", "🎯")
+            if typing_passed_flag:
+                st.success("✅ Typing Test Passed!")
+            else:
+                st.error("❌ Typing Test: Below minimum (20 WPM, 95% accuracy)")
         
         # Certificate download if passed
         if passed and res.get("result_id"):
@@ -690,7 +867,11 @@ def show_exam_results_screen():
                 "percentage": res["percentage"],
                 "grade": res["grade"],
                 "issue_date": datetime.now().strftime("%Y-%m-%d"),
-                "verification_url": verification_url
+                "verification_url": verification_url,
+                "typing_wpm": res.get("typing_wpm"),
+                "typing_accuracy": res.get("typing_accuracy"),
+                "bcc_grade": res.get("bcc_grade"),
+                "msoffice_grade": res.get("msoffice_grade")
             }
             
             try:
@@ -702,13 +883,14 @@ def show_exam_results_screen():
                     file_name=f"BCC_Certificate_{cert['certificate_id']}.pdf",
                     mime="application/pdf",
                     type="primary",
-                    width="stretch"
+                    use_container_width=True
                 )
             except Exception as e:
                 st.error(f"Error compiling certificate: {e}")
+
                 
     st.markdown("<hr/>", unsafe_allow_html=True)
-    if st.button("🔙 Return to Student Dashboard", width="stretch"):
+    if st.button("🔙 Return to Student Dashboard", use_container_width=True):
         if "last_exam_results" in st.session_state:
             del st.session_state["last_exam_results"]
         st.session_state.current_view = "Dashboard"
@@ -738,7 +920,7 @@ def render_admin_portal():
     st.session_state.current_view = selected_option
     
     st.sidebar.markdown("---")
-    if st.sidebar.button("🚪 Log Out", width="stretch"):
+    if st.sidebar.button("🚪 Log Out", use_container_width=True):
         Auth.logout()
         st.rerun()
         
@@ -789,11 +971,11 @@ def admin_dashboard_view():
         with col_c1:
             fig_pie = UIHelper.plot_pass_fail_pie(results_df)
             if fig_pie:
-                st.plotly_chart(fig_pie, width="stretch")
+                st.plotly_chart(fig_pie)
         with col_c2:
             fig_trends = UIHelper.plot_exam_trends_line(results_df)
             if fig_trends:
-                st.plotly_chart(fig_trends, width="stretch")
+                st.plotly_chart(fig_trends)
                 
         # Leaderboard rankings
         st.markdown("### 🏆 Top Performing Student Leaderboard")
@@ -839,13 +1021,13 @@ def admin_students_view():
                     "Email": s["email"],
                     "Roll Number": s["roll_number"],
                     "Phone": s["phone"] or "N/A",
-                    "Enrolled On": s["created_at"][:10],
+                    "Enrolled On": str(s["created_at"])[:10] if s.get("created_at") else "N/A",
                     "id": s["id"]
                 } for s in students
             ])
             
             # Action: Edit/Delete
-            st.dataframe(stud_df.drop(columns=["id"]), width="stretch")
+            st.dataframe(stud_df.drop(columns=["id"]))
             
             st.markdown("### Manage / Delete Student")
             target_roll = st.selectbox("Select Student Roll Number to Delete", options=[""] + [s["roll_number"] for s in students])
@@ -1016,7 +1198,7 @@ def admin_questions_view():
                     df = pd.read_excel(uploaded_file)
                     
                 st.write("Preview of Uploaded Data:")
-                st.dataframe(df.head(), width="stretch")
+                st.dataframe(df.head())
                 
                 # Check columns
                 required_cols = {'topic', 'question_text', 'question_type', 'correct_option', 'difficulty'}
@@ -1167,7 +1349,7 @@ def admin_reports_view():
             "Percentage": f"{r['percentage']:.2f}%",
             "Grade": r["grade"],
             "Result": "PASSED" if r["passed"] else "FAILED",
-            "Submitted On": r["submitted_at"][:16],
+            "Submitted On": str(r["submitted_at"])[:16],
             "id": r["id"]
         } for r in results
     ])
@@ -1183,7 +1365,7 @@ def admin_reports_view():
     )
     
     # Reports list
-    st.dataframe(res_df.drop(columns=["id"]), width="stretch")
+    st.dataframe(res_df.drop(columns=["id"]))
     
     st.markdown("### View Detailed Candidate Sheet")
     selected_result_idx = st.selectbox(
@@ -1246,7 +1428,6 @@ if __name__ == "__main__":
     # Handle global verification URLs if present
     query_params = st.query_params
     if "verify" in query_params:
-        st.set_page_config(page_title="Certificate Verification", page_icon="🎓", layout="centered")
         UIHelper.inject_custom_css()
         
         cert_id = query_params["verify"]
@@ -1270,7 +1451,7 @@ if __name__ == "__main__":
                     <tr><td style='padding:6px; font-weight:bold; color:#1E3A8A;'>Roll Number:</td><td>{cert_details['students']['roll_number']}</td></tr>
                     <tr><td style='padding:6px; font-weight:bold; color:#1E3A8A;'>Exam Completed:</td><td>{cert_details['results']['exams']['title']}</td></tr>
                     <tr><td style='padding:6px; font-weight:bold; color:#1E3A8A;'>Grade Achieved:</td><td><b>{cert_details['results']['grade']}</b> ({cert_details['results']['percentage']:.2f}%)</td></tr>
-                    <tr><td style='padding:6px; font-weight:bold; color:#1E3A8A;'>Date of Issue:</td><td>{cert_details['issue_date'][:10]}</td></tr>
+                    <tr><td style='padding:6px; font-weight:bold; color:#1E3A8A;'>Date of Issue:</td><td>{str(cert_details['issue_date'])[:10]}</td></tr>
                 </table>
             </div>
             """, unsafe_allow_html=True)
@@ -1288,12 +1469,11 @@ if __name__ == "__main__":
             </div>
             """, unsafe_allow_html=True)
             
-        if st.button("⬅️ Go to Portal Homepage", width="stretch"):
+        if st.button("⬅️ Go to Portal Homepage", use_container_width=True):
             st.query_params.clear()
             st.rerun()
     elif st.session_state.get("current_view") == "ExamResultScreen":
         # Render custom full page for results display
-        st.set_page_config(page_title="Assessment Results", page_icon="🎓", layout="wide")
         UIHelper.inject_custom_css()
         show_exam_results_screen()
     else:

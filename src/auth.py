@@ -52,29 +52,64 @@ class Auth:
                 if "invalid login credentials" in msg.lower() or "invalid credentials" in msg.lower():
                     msg = "Invalid email or password."
                 return False, msg
+        elif Config.IS_SUPABASE_CONFIGURED and db.mode == "Postgres":
+            # Direct Postgres login using local_auth table
+            try:
+                conn = db._get_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT * FROM local_auth WHERE LOWER(email) = LOWER(%s)", (email,))
+                row = cur.fetchone()
+                cur.close()
+                conn.close()
+
+                if not row:
+                    return False, "Invalid email or password."
+
+                # row may be a tuple; map to keys by querying column names if needed
+                # Simpler: fetch password by email again using dict cursor if available
+                # For now assume row[2] is password_hash and row[3] is role for local_auth schema
+                password_hash = row[2] if len(row) > 2 else None
+                role = row[3] if len(row) > 3 else None
+
+                if not password_hash or not Auth.check_password(password, password_hash):
+                    return False, "Invalid email or password."
+
+                user_id = row[0]
+                if role == "admin":
+                    user_data = db.get_admin_by_id(user_id)
+                else:
+                    user_data = db.get_student_by_id(user_id)
+
+                if not user_data:
+                    return False, "User details not found in database records."
+
+                Auth._set_session(user_id, email, role, user_data)
+                return True, role
+            except Exception as e:
+                return False, f"Login error: {str(e)}"
         else:
             # SQLite Mock Auth Login
             try:
                 conn = db._get_connection()
                 row = conn.execute("SELECT * FROM local_auth WHERE LOWER(email) = ?", (email,)).fetchone()
                 conn.close()
-                
+
                 if not row:
                     return False, "Invalid email or password."
-                
+
                 local_user = dict(row)
                 if not Auth.check_password(password, local_user["password_hash"]):
                     return False, "Invalid email or password."
-                
+
                 role = local_user["role"]
                 if role == "admin":
                     user_data = db.get_admin_by_id(local_user["id"])
                 else:
                     user_data = db.get_student_by_id(local_user["id"])
-                
+
                 if not user_data:
                     return False, "User details not found in database records."
-                
+
                 Auth._set_session(local_user["id"], email, role, user_data)
                 return True, role
             except Exception as e:
@@ -120,25 +155,49 @@ class Auth:
                 return True, "Registration successful! You can now log in."
             except Exception as e:
                 return False, f"Supabase Signup error: {str(e)}"
+        elif Config.IS_SUPABASE_CONFIGURED and db.mode == "Postgres":
+            # Postgres direct mode: store credentials in local_auth and create student row
+            try:
+                user_id = str(uuid.uuid4())
+                pass_hash = Auth.hash_password(password)
+
+                conn = db._get_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT * FROM local_auth WHERE LOWER(email) = LOWER(%s)", (email,))
+                if cur.fetchone():
+                    cur.close()
+                    conn.close()
+                    return False, "Email already registered."
+
+                cur.execute("INSERT INTO local_auth (id, email, password_hash, role) VALUES (%s, %s, %s, %s)",
+                            (user_id, email, pass_hash, "student"))
+                conn.commit()
+                cur.close()
+                conn.close()
+
+                db.create_student(user_id, email, name, roll_number, phone)
+                return True, "Registration successful! You can now log in."
+            except Exception as e:
+                return False, f"Postgres Signup error: {str(e)}"
         else:
             # SQLite Mock Auth Signup
             try:
                 user_id = str(uuid.uuid4())
                 pass_hash = Auth.hash_password(password)
-                
+
                 conn = db._get_connection()
                 # Check email in local_auth
                 row = conn.execute("SELECT * FROM local_auth WHERE LOWER(email) = ?", (email,)).fetchone()
                 if row:
                     conn.close()
                     return False, "Email already registered."
-                
+
                 # Insert credentials
                 conn.execute("INSERT INTO local_auth (id, email, password_hash, role) VALUES (?, ?, ?, ?)",
                              (user_id, email, pass_hash, "student"))
                 conn.commit()
                 conn.close()
-                
+
                 # Insert student details
                 db.create_student(user_id, email, name, roll_number, phone)
                 return True, "Registration successful! You can now log in."
@@ -166,17 +225,34 @@ class Auth:
                 return True, "Admin created successfully."
             except Exception as e:
                 return False, str(e)
+        elif Config.IS_SUPABASE_CONFIGURED and db.mode == "Postgres":
+            try:
+                user_id = str(uuid.uuid4())
+                pass_hash = Auth.hash_password(password)
+
+                conn = db._get_connection()
+                cur = conn.cursor()
+                cur.execute("INSERT INTO local_auth (id, email, password_hash, role) VALUES (%s, %s, %s, %s)",
+                            (user_id, email, pass_hash, "admin"))
+                conn.commit()
+                cur.close()
+                conn.close()
+
+                db.create_admin(user_id, email, name)
+                return True, "Admin created successfully."
+            except Exception as e:
+                return False, str(e)
         else:
             try:
                 user_id = str(uuid.uuid4())
                 pass_hash = Auth.hash_password(password)
-                
+
                 conn = db._get_connection()
                 conn.execute("INSERT INTO local_auth (id, email, password_hash, role) VALUES (?, ?, ?, ?)",
                              (user_id, email, pass_hash, "admin"))
                 conn.commit()
                 conn.close()
-                
+
                 db.create_admin(user_id, email, name)
                 return True, "Admin created successfully."
             except Exception as e:
@@ -190,6 +266,20 @@ class Auth:
             try:
                 db.client.auth.reset_password_for_email(email)
                 return True, "Password reset email sent. Please check your inbox."
+            except Exception as e:
+                return False, str(e)
+        elif Config.IS_SUPABASE_CONFIGURED and db.mode == "Postgres":
+            # Postgres direct: mock reset by checking local_auth
+            try:
+                conn = db._get_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT * FROM local_auth WHERE LOWER(email) = LOWER(%s)", (email,))
+                row = cur.fetchone()
+                cur.close()
+                conn.close()
+                if row:
+                    return True, "[POSTGRES MODE MOCK] A password reset link has been simulated for email: " + email
+                return False, "No account found with this email address."
             except Exception as e:
                 return False, str(e)
         else:

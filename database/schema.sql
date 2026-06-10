@@ -164,3 +164,22 @@ CREATE POLICY "Students can manage their own responses" ON responses FOR ALL TO 
 CREATE POLICY "Admins can manage certificates" ON certificates FOR ALL TO authenticated USING (is_admin());
 CREATE POLICY "Students can read their own certificates" ON certificates FOR SELECT TO authenticated USING (student_id = auth.uid());
 CREATE POLICY "Students can insert their own certificates" ON certificates FOR INSERT TO authenticated WITH CHECK (student_id = auth.uid());
+
+-- ====================================================================
+-- 9. TYPING RESULTS TABLE
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS typing_results (
+    id SERIAL PRIMARY KEY,
+    result_id INT REFERENCES results(id) ON DELETE CASCADE,
+    wpm INT NOT NULL DEFAULT 0,
+    accuracy NUMERIC(5,2) NOT NULL DEFAULT 0.0,
+    passage_text TEXT NOT NULL,
+    typed_text TEXT NOT NULL,
+    passed BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- 9. typing_results RLS Policies
+ALTER TABLE typing_results ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admins can manage typing_results" ON typing_results FOR ALL TO authenticated USING (is_admin());
+CREATE POLICY "Students can manage their own typing_results" ON typing_results FOR ALL TO authenticated 
+    USING (EXISTS (SELECT 1 FROM results WHERE id = typing_results.result_id AND student_id = auth.uid()));

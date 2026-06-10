@@ -47,23 +47,11 @@ INSERT INTO question_bank (topic, question_text, question_type, option_a, option
 -- SEED EXAMS
 -- ====================================================================
 INSERT INTO exams (title, description, duration_minutes, total_questions, passing_percentage, is_active) VALUES
-('BCC General Certification Exam', 'Comprehensive examination covering Computer Fundamentals, Windows OS, MS Word, MS Excel, and Internet basics.', 30, 15, 40.0, TRUE),
-('MS Office Master Quiz', 'Assessment focusing specifically on MS Word and MS Excel techniques.', 15, 8, 50.0, TRUE);
-
+('Unified BCC Certification Exam', 'Comprehensive examination covering Computer Fundamentals, Windows OS, MS Word, MS Excel, MS PowerPoint, and Internet basics, alongside a typing test.', 30, 26, 40.0, TRUE);
 
 -- ====================================================================
 -- SEED EXAM QUESTIONS (Assign questions to the exams)
 -- ====================================================================
--- For BCC General Certification Exam (15 questions)
-INSERT INTO exam_questions (exam_id, question_id) VALUES
-(1, 1), (1, 2), (1, 3), (1, 5), -- Fundamentals
-(1, 6), (1, 7), (1, 8),         -- OS
-(1, 10), (1, 11), (1, 12),      -- Word
-(1, 14), (1, 15),               -- Excel
-(1, 18), (1, 19),               -- Internet
-(1, 21);                         -- TF Linux
-
--- For MS Office Master Quiz (8 questions)
-INSERT INTO exam_questions (exam_id, question_id) VALUES
-(2, 10), (2, 11), (2, 12), (2, 13), -- Word
-(2, 14), (2, 15), (2, 16), (2, 17); -- Excel
+-- For Unified Exam (Assign all questions, assuming IDs 1 to 26 exist based on the previous inserts + any additional seeds)
+INSERT INTO exam_questions (exam_id, question_id) 
+SELECT 1, id FROM question_bank;

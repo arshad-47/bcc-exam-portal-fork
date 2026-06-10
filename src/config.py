@@ -27,8 +27,11 @@ class Config:
     if not SUPABASE_KEY:
         SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-    # Flag to check if we can connect to Supabase
-    IS_SUPABASE_CONFIGURED = bool(SUPABASE_URL and SUPABASE_KEY)
+# Detect if SUPABASE_URL is a direct Postgres URL (e.g., postgresql://...)
+    POSTGRES_DIRECT = bool(SUPABASE_URL and str(SUPABASE_URL).lower().startswith("postgresql://"))
+
+    # Flag to check if we can connect to Supabase (HTTP API) or direct Postgres
+    IS_SUPABASE_CONFIGURED = bool(SUPABASE_URL and (SUPABASE_KEY or POSTGRES_DIRECT))
     
     # Session configurations
     SESSION_TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))
@@ -39,3 +42,8 @@ class Config:
     # Institute details
     INSTITUTE_NAME = "Phoenix Tech Academy"
     COURSE_NAME = "Basic Computer Course (BCC)"
+    CERTIFICATE_TAGLINE = os.getenv("CERTIFICATE_TAGLINE", "(*ISO 9001:2015 Certified)")
+    CERTIFICATE_TEMPLATE_PATH = os.getenv("CERTIFICATE_TEMPLATE_PATH", "svgs/cert_temp.jpg")
+    PROGRAM_DIRECTOR_NAME = os.getenv("PROGRAM_DIRECTOR_NAME", "Pranav M. Bansode")
+    PROGRAM_DIRECTOR_TITLE = os.getenv("PROGRAM_DIRECTOR_TITLE", "Program Director & CEO")
+    PROGRAM_DIRECTOR_SIGNATURE_PATH = os.getenv("PROGRAM_DIRECTOR_SIGNATURE_PATH", "svgs/sign.png")

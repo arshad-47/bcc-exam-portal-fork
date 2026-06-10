@@ -99,6 +99,21 @@ class EvaluationEngine:
                 "accuracy": round(acc, 2)
             }
             
+        # Group modules for the Unified Exam
+        bcc_topics = ['Computer Fundamentals', 'Operating Systems', 'Internet & Web']
+        msoffice_topics = ['MS Word', 'MS Excel', 'MS PowerPoint']
+        
+        def _get_module_grade(topics_list):
+            m_total = sum(topic_map.get(t, {}).get('total', 0) for t in topics_list)
+            m_corr = sum(topic_map.get(t, {}).get('correct', 0) for t in topics_list)
+            if m_total > 0:
+                m_perc = (m_corr / m_total) * 100.0
+                return EvaluationEngine.calculate_grade(m_perc)
+            return "N/A"
+            
+        bcc_grade = _get_module_grade(bcc_topics)
+        msoffice_grade = _get_module_grade(msoffice_topics)
+
         return {
             "score": score,
             "total_questions": total_questions,
@@ -106,5 +121,37 @@ class EvaluationEngine:
             "grade": grade,
             "passed": passed,
             "topic_analysis": topic_analysis,
-            "response_details": response_details
+            "response_details": response_details,
+            "bcc_grade": bcc_grade,
+            "msoffice_grade": msoffice_grade
+        }
+
+    @staticmethod
+    def evaluate_typing_test(expected_text: str, typed_text: str, duration_minutes: float) -> Dict[str, Any]:
+        """
+        Evaluates typing test performance.
+        WPM = (Total characters typed / 5) / duration
+        Accuracy = (Correctly typed characters / Total expected characters) * 100
+        """
+        expected_words = expected_text.strip().split()
+        typed_words = typed_text.strip().split()
+        
+        correct_chars = 0
+        total_typed_chars = len(typed_text)
+        
+        # Simple word-by-word comparison for accuracy (can be refined later)
+        for i, expected_word in enumerate(expected_words):
+            if i < len(typed_words) and typed_words[i] == expected_word:
+                correct_chars += len(expected_word) + 1 # +1 for space
+                
+        # Gross WPM formula
+        wpm = int((total_typed_chars / 5) / duration_minutes) if duration_minutes > 0 else 0
+        
+        # Accuracy based on correct words/chars
+        expected_chars_total = len(expected_text)
+        accuracy = (correct_chars / expected_chars_total * 100.0) if expected_chars_total > 0 else 0.0
+        
+        return {
+            "wpm": max(0, wpm),
+            "accuracy": min(100.0, max(0.0, round(accuracy, 2)))
         }
