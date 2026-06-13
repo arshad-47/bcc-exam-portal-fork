@@ -3,7 +3,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 # Load environment variables from .env file if present
-load_dotenv()
+load_dotenv(override=True)
 
 # App Configuration
 class Config:

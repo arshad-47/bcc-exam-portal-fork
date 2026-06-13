@@ -160,7 +160,7 @@ class CertificateGenerator:
         qr.add_data(cert_data.get('verification_url', ''))
         qr.make(fit=True)
         qr_img = qr.make_image(fill_color="#1E3A8A", back_color="white")
-        qr_img.save(qr_buf, format="PNG")
+        qr_img.save(qr_buf, kind="PNG")
         qr_buf.seek(0)
         qr_reader = ImageReader(qr_buf)
 
