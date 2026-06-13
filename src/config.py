@@ -46,4 +46,4 @@ class Config:
     CERTIFICATE_TEMPLATE_PATH = os.getenv("CERTIFICATE_TEMPLATE_PATH", "svgs/cert_temp.jpg")
     PROGRAM_DIRECTOR_NAME = os.getenv("PROGRAM_DIRECTOR_NAME", "Pranav M. Bansode")
     PROGRAM_DIRECTOR_TITLE = os.getenv("PROGRAM_DIRECTOR_TITLE", "Program Director & CEO")
-    PROGRAM_DIRECTOR_SIGNATURE_PATH = os.getenv("PROGRAM_DIRECTOR_SIGNATURE_PATH", "svgs/sign.png")
+    PROGRAM_DIRECTOR_SIGNATURE_PATH = os.getenv("PROGRAM_DIRECTOR_SIGNATURE_PATH", "svgs/p_sign.png")
