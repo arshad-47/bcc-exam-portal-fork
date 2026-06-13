@@ -467,6 +467,13 @@ def render_exam_interface():
     st.title(f"💻 BCC Certification Exam Engine")
     st.subheader(exam["title"])
     
+    if current_idx >= len(questions):
+        current_idx = len(questions) - 1
+        st.session_state.current_question_index = current_idx
+    elif current_idx < 0:
+        current_idx = 0
+        st.session_state.current_question_index = current_idx
+
     q_curr = questions[current_idx]
     q_id_curr = q_curr["id"]
     
@@ -538,16 +545,18 @@ def render_exam_interface():
     col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([1, 1, 1, 1])
     
     with col_nav1:
-        if st.button("⬅️ Previous Question", disabled=(current_idx == 0), use_container_width=True):
-            st.session_state.current_question_index -= 1
-            st.session_state.exam_visited_questions.add(questions[st.session_state.current_question_index]["id"])
-            st.rerun()
+        if st.button("⬅️ Previous Question", disabled=(current_idx <= 0), use_container_width=True):
+            if st.session_state.current_question_index > 0:
+                st.session_state.current_question_index -= 1
+                st.session_state.exam_visited_questions.add(questions[st.session_state.current_question_index]["id"])
+                st.rerun()
             
     with col_nav2:
-        if st.button("Next Question ➡️", disabled=(current_idx == len(questions) - 1), use_container_width=True):
-            st.session_state.current_question_index += 1
-            st.session_state.exam_visited_questions.add(questions[st.session_state.current_question_index]["id"])
-            st.rerun()
+        if st.button("Next Question ➡️", disabled=(current_idx >= len(questions) - 1), use_container_width=True):
+            if st.session_state.current_question_index < len(questions) - 1:
+                st.session_state.current_question_index += 1
+                st.session_state.exam_visited_questions.add(questions[st.session_state.current_question_index]["id"])
+                st.rerun()
             
     with col_nav3:
         flag_btn_label = "Unflag Question 🏳️" if q_id_curr in flagged else "Flag for Review 🏴"
@@ -667,7 +676,9 @@ def render_typing_test():
         </script>
     """
     with st.sidebar:
-        components.html(timer_html, height=80)
+        import base64
+        b64_html = base64.b64encode(timer_html.encode('utf-8')).decode('utf-8')
+        components.iframe(f"data:text/html;base64,{b64_html}", height=80)
         
     st.sidebar.markdown("---")
     st.sidebar.info("Type the passage exactly as shown. Accuracy and speed both count!")
@@ -856,7 +867,7 @@ def show_exam_results_screen():
                 db.create_certificate(cert_id, st.session_state.user_id, res["result_id"])
                 cert = {"certificate_id": cert_id}
                 
-            base_url = "http://localhost:8501" # Default local port
+            base_url = "https://bcc-exam-phoenix-tech.streamlit.app" # Default local port
             verification_url = f"{base_url}/?verify={cert['certificate_id']}"
             
             cert_data = {
