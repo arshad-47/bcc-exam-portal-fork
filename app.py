@@ -352,7 +352,7 @@ def student_results_view():
                     cert = {"certificate_id": cert_id}
                     
                 # Setup verification link
-                base_url = "http://localhost:8501" # Default local port
+                base_url = "https://bcc-exam-phoenix-tech.streamlit.app" # Default local port
                 verification_url = f"{base_url}/?verify={cert['certificate_id']}"
 
                 typing_result = typing_result or {}
