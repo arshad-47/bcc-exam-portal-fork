@@ -1218,11 +1218,11 @@ def admin_questions_view():
                 else:
                     if st.button("Confirm Bulk Upload", type="primary"):
                         # Ensure fields are strings/clean
-                        df['topic'] = df['topic'].astype(str)
-                        df['question_text'] = df['question_text'].astype(str)
-                        df['question_type'] = df['question_type'].astype(str).str.upper()
-                        df['correct_option'] = df['correct_option'].astype(str).str.upper()
-                        df['difficulty'] = df['difficulty'].astype(str)
+                        df['topic'] = df['topic'].astype(str).str.strip()
+                        df['question_text'] = df['question_text'].astype(str).str.strip()
+                        df['question_type'] = df['question_type'].astype(str).str.strip().str.upper()
+                        df['correct_option'] = df['correct_option'].astype(str).str.strip().str.upper()
+                        df['difficulty'] = df['difficulty'].astype(str).str.strip()
                         
                         # Replace nulls in options
                         for col in ['option_a', 'option_b', 'option_c', 'option_d']:
