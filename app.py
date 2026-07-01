@@ -76,9 +76,8 @@ def render_login_screen():
             unsafe_allow_html=True
         )
         
-        tab_login, tab_register, tab_forgot = st.tabs([
+        tab_login, tab_forgot = st.tabs([
             "🔑 User Login", 
-            "📝 Student Registration", 
             "❓ Forgot Password"
         ])
         
@@ -103,32 +102,32 @@ def render_login_screen():
                         "- **Email**: `admin@bcc.com` | **Password**: `admin123`\n"
                         "Or create a Student account in the Registration tab.")
                         
-        with tab_register:
-            st.markdown("### Create Student Account")
-            reg_name = st.text_input("Full Name", placeholder="e.g. John Doe")
-            reg_email = st.text_input("Email Address", placeholder="e.g. john@example.com")
-            reg_roll = st.text_input("Enrollment / Roll Number", placeholder="e.g. BCC-2026-101")
-            reg_phone = st.text_input("Phone Number (Optional)", placeholder="e.g. +91 9876543210")
-            reg_password = st.text_input("Choose Password", type="password", help="Minimum 6 characters")
-            reg_confirm = st.text_input("Confirm Password", type="password")
+        # with tab_register:
+        #     st.markdown("### Create Student Account")
+        #     reg_name = st.text_input("Full Name", placeholder="e.g. John Doe")
+        #     reg_email = st.text_input("Email Address", placeholder="e.g. john@example.com")
+        #     reg_roll = st.text_input("Enrollment / Roll Number", placeholder="e.g. BCC-2026-101")
+        #     reg_phone = st.text_input("Phone Number (Optional)", placeholder="e.g. +91 9876543210")
+        #     reg_password = st.text_input("Choose Password", type="password", help="Minimum 6 characters")
+        #     reg_confirm = st.text_input("Confirm Password", type="password")
             
-            if st.button("Register Student", type="primary", use_container_width=True):
-                if reg_password != reg_confirm:
-                    st.error("Passwords do not match.")
-                elif len(reg_password) < 6:
-                    st.error("Password must be at least 6 characters long.")
-                else:
-                    success, msg = Auth.signup_student(
-                        email=reg_email,
-                        password=reg_password,
-                        name=reg_name,
-                        roll_number=reg_roll,
-                        phone=reg_phone
-                    )
-                    if success:
-                        st.success(msg)
-                    else:
-                        st.error(msg)
+        #     if st.button("Register Student", type="primary", use_container_width=True):
+        #         if reg_password != reg_confirm:
+        #             st.error("Passwords do not match.")
+        #         elif len(reg_password) < 6:
+        #             st.error("Password must be at least 6 characters long.")
+        #         else:
+        #             success, msg = Auth.signup_student(
+        #                 email=reg_email,
+        #                 password=reg_password,
+        #                 name=reg_name,
+        #                 roll_number=reg_roll,
+        #                 phone=reg_phone
+        #             )
+        #             if success:
+        #                 st.success(msg)
+        #             else:
+        #                 st.error(msg)
                         
         with tab_forgot:
             st.markdown("### Reset Password")
